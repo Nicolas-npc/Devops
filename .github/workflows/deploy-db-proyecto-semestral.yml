@@ -1,5 +1,5 @@
 name: Deploy Proyecto Semestral DB
-# trigger: deploy branch path activation
+# Despliega MySQL en la misma EC2 de backend (arquitectura de 2 EC2)
 
 on:
   workflow_dispatch:
@@ -31,15 +31,11 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Reiniciar MySQL en EC2 por SSM
-        env:
-          EC2_PATH: ${{ github.event.inputs.ec2_path }}
+      - name: Reiniciar MySQL en EC2 backend por SSM
         run: |
-          if [ -z "$EC2_PATH" ]; then EC2_PATH="/opt/proyecto-semestral-db"; fi
-
           aws ssm send-command \
-            --instance-ids "${{ secrets.EC2_DB_INSTANCE_ID }}" \
+            --instance-ids "${{ secrets.EC2_BACKEND_INSTANCE_ID }}" \
             --document-name "AWS-RunShellScript" \
-            --comment "Actualizar base de datos proyecto semestral" \
-            --parameters "{\"commands\":[\"set -e\",\"sudo mkdir -p $EC2_PATH\",\"docker volume create proyecto-semestral-dbdata || true\",\"docker stop proyecto-semestral-db || true\",\"docker rm proyecto-semestral-db || true\",\"docker pull mysql:8.0\",\"docker run -d --name proyecto-semestral-db --restart unless-stopped -p 3306:3306 -e MYSQL_ROOT_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }} -e MYSQL_DATABASE=${{ secrets.DB_NAME }} -e MYSQL_USER=${{ secrets.DB_USER }} -e MYSQL_PASSWORD=${{ secrets.DB_PASSWORD }} -v proyecto-semestral-dbdata:/var/lib/mysql mysql:8.0\"]}" \
+            --comment "Actualizar MySQL en EC2 backend" \
+            --parameters "{\"commands\":[\"set -e\",\"docker network create proyecto-semestral-net || true\",\"docker volume create proyecto-semestral-dbdata || true\",\"docker stop proyecto-semestral-db || true\",\"docker rm proyecto-semestral-db || true\",\"docker pull mysql:8.0\",\"docker run -d --name proyecto-semestral-db --network proyecto-semestral-net --restart unless-stopped -p 3306:3306 -e MYSQL_ROOT_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }} -e MYSQL_DATABASE=${{ secrets.DB_NAME }} -e MYSQL_USER=${{ secrets.DB_USER }} -e MYSQL_PASSWORD=${{ secrets.DB_PASSWORD }} -v proyecto-semestral-dbdata:/var/lib/mysql mysql:8.0 --default-authentication-plugin=mysql_native_password\"]}" \
             --output text

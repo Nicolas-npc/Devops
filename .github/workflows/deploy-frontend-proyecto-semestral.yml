@@ -5,10 +5,10 @@ on:
     inputs:
       ventas_upstream:
         description: "Host o IP del backend de ventas expuesto por la EC2"
-        required: true
+        required: false
       despachos_upstream:
         description: "Host o IP del backend de despachos expuesto por la EC2"
-        required: true
+        required: false
   push:
     branches: ["deploy"]
     paths:

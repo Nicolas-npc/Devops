@@ -2,11 +2,6 @@ name: Deploy Proyecto Semestral Backend
 
 on:
   workflow_dispatch:
-    inputs:
-      ec2_path:
-        description: "Ruta absoluta del proyecto en la EC2 de backend"
-        required: true
-        default: "/opt/proyecto-semestral"
   push:
     branches: ["deploy"]
     paths:
@@ -48,24 +43,11 @@ jobs:
           docker tag proyecto-semestral-despachos:latest ${{ secrets.ECR_REPO_URL_DESPACHOS }}:latest
           docker push ${{ secrets.ECR_REPO_URL_DESPACHOS }}:latest
 
-      - name: Reiniciar backend ventas en EC2 por SSM
-        env:
-          EC2_PATH: ${{ github.event.inputs.ec2_path }}
-        run: |
-          if [ -z "$EC2_PATH" ]; then EC2_PATH="/opt/proyecto-semestral"; fi
-
-          aws ssm send-command \
-            --instance-ids "${{ secrets.EC2_BACKEND_VENTAS_INSTANCE_ID }}" \
-            --document-name "AWS-RunShellScript" \
-            --comment "Actualizar backend ventas" \
-            --parameters "{\"commands\":[\"set -e\",\"aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}\",\"docker pull ${{ secrets.ECR_REPO_URL_VENTAS }}:latest\",\"docker stop proyecto-semestral-ventas || true\",\"docker rm proyecto-semestral-ventas || true\",\"docker run -d --name proyecto-semestral-ventas -p 8080:8080 -e DB_ENDPOINT=${{ secrets.DB_EC2_ENDPOINT }} -e DB_PORT=3306 -e DB_NAME=${{ secrets.DB_NAME }} -e DB_USERNAME=${{ secrets.DB_USER }} -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} ${{ secrets.ECR_REPO_URL_VENTAS }}:latest\"]}" \
-            --output text
-
-      - name: Reiniciar backend despachos en EC2 por SSM
+      - name: Desplegar MySQL + backends en una sola EC2 por SSM
         run: |
           aws ssm send-command \
-            --instance-ids "${{ secrets.EC2_BACKEND_DESPACHOS_INSTANCE_ID }}" \
+            --instance-ids "${{ secrets.EC2_BACKEND_INSTANCE_ID }}" \
             --document-name "AWS-RunShellScript" \
-            --comment "Actualizar backend despachos" \
-            --parameters "{\"commands\":[\"set -e\",\"aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}\",\"docker pull ${{ secrets.ECR_REPO_URL_DESPACHOS }}:latest\",\"docker stop proyecto-semestral-despachos || true\",\"docker rm proyecto-semestral-despachos || true\",\"docker run -d --name proyecto-semestral-despachos -p 8081:8081 -e DB_ENDPOINT=${{ secrets.DB_EC2_ENDPOINT }} -e DB_PORT=3306 -e DB_NAME=${{ secrets.DB_NAME }} -e DB_USERNAME=${{ secrets.DB_USER }} -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} ${{ secrets.ECR_REPO_URL_DESPACHOS }}:latest\"]}" \
+            --comment "Actualizar MySQL + backends proyecto semestral" \
+            --parameters "{\"commands\":[\"set -e\",\"aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}\",\"docker network create proyecto-semestral-net || true\",\"docker volume create proyecto-semestral-dbdata || true\",\"docker pull mysql:8.0\",\"docker pull ${{ secrets.ECR_REPO_URL_VENTAS }}:latest\",\"docker pull ${{ secrets.ECR_REPO_URL_DESPACHOS }}:latest\",\"docker stop proyecto-semestral-db || true\",\"docker rm proyecto-semestral-db || true\",\"docker run -d --name proyecto-semestral-db --network proyecto-semestral-net --restart unless-stopped -p 3306:3306 -e MYSQL_ROOT_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }} -e MYSQL_DATABASE=${{ secrets.DB_NAME }} -e MYSQL_USER=${{ secrets.DB_USER }} -e MYSQL_PASSWORD=${{ secrets.DB_PASSWORD }} -v proyecto-semestral-dbdata:/var/lib/mysql mysql:8.0 --default-authentication-plugin=mysql_native_password\",\"sleep 20\",\"docker stop proyecto-semestral-ventas || true\",\"docker rm proyecto-semestral-ventas || true\",\"docker stop proyecto-semestral-despachos || true\",\"docker rm proyecto-semestral-despachos || true\",\"docker run -d --name proyecto-semestral-ventas --network proyecto-semestral-net -p 8080:8080 -e DB_ENDPOINT=proyecto-semestral-db -e DB_PORT=3306 -e DB_NAME=${{ secrets.DB_NAME }} -e DB_USERNAME=${{ secrets.DB_USER }} -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} ${{ secrets.ECR_REPO_URL_VENTAS }}:latest\",\"docker run -d --name proyecto-semestral-despachos --network proyecto-semestral-net -p 8081:8081 -e DB_ENDPOINT=proyecto-semestral-db -e DB_PORT=3306 -e DB_NAME=${{ secrets.DB_NAME }} -e DB_USERNAME=${{ secrets.DB_USER }} -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} ${{ secrets.ECR_REPO_URL_DESPACHOS }}:latest\"]}" \
             --output text
