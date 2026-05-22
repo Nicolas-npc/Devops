@@ -1,0 +1,44 @@
+name: Deploy Proyecto Semestral DB
+
+on:
+  workflow_dispatch:
+    inputs:
+      ec2_path:
+        description: "Ruta de trabajo en la EC2 de base de datos"
+        required: true
+        default: "/opt/proyecto-semestral-db"
+  push:
+    branches: ["deploy"]
+    paths:
+      - ".github/workflows/deploy-db-proyecto-semestral.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-db:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Reiniciar MySQL en EC2 por SSM
+        env:
+          EC2_PATH: ${{ github.event.inputs.ec2_path }}
+        run: |
+          if [ -z "$EC2_PATH" ]; then EC2_PATH="/opt/proyecto-semestral-db"; fi
+
+          aws ssm send-command \
+            --instance-ids "${{ secrets.EC2_DB_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Actualizar base de datos proyecto semestral" \
+            --parameters "{\"commands\":[\"set -e\",\"sudo mkdir -p $EC2_PATH\",\"docker volume create proyecto-semestral-dbdata || true\",\"docker stop proyecto-semestral-db || true\",\"docker rm proyecto-semestral-db || true\",\"docker pull mysql:8.0\",\"docker run -d --name proyecto-semestral-db --restart unless-stopped -p 3306:3306 -e MYSQL_ROOT_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }} -e MYSQL_DATABASE=${{ secrets.DB_NAME }} -e MYSQL_USER=${{ secrets.DB_USER }} -e MYSQL_PASSWORD=${{ secrets.DB_PASSWORD }} -v proyecto-semestral-dbdata:/var/lib/mysql mysql:8.0\"]}" \
+            --output text

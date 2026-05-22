@@ -1,0 +1,66 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: proyecto-semestral-db
+    environment:
+      MYSQL_ROOT_PASSWORD: admin123
+      MYSQL_DATABASE: proyecto_semestral
+      MYSQL_USER: alumno
+      MYSQL_PASSWORD: alumno123
+    ports:
+      - "3306:3306"
+    volumes:
+      - dbdata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ventas:
+    build:
+      context: ./back-Ventas_SpringBoot/Springboot-API-REST
+    container_name: proyecto-semestral-ventas
+    environment:
+      DB_ENDPOINT: db
+      DB_PORT: 3306
+      DB_NAME: proyecto_semestral
+      DB_USERNAME: root
+      DB_PASSWORD: admin123
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  despachos:
+    build:
+      context: ./back-Despachos_SpringBoot/Springboot-API-REST-DESPACHO
+    container_name: proyecto-semestral-despachos
+    environment:
+      DB_ENDPOINT: db
+      DB_PORT: 3306
+      DB_NAME: proyecto_semestral
+      DB_USERNAME: root
+      DB_PASSWORD: admin123
+    ports:
+      - "8081:8081"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./front_despacho
+    container_name: proyecto-semestral-frontend
+    environment:
+      VENTAS_UPSTREAM: ventas:8080
+      DESPACHOS_UPSTREAM: despachos:8081
+    ports:
+      - "80:80"
+    depends_on:
+      - ventas
+      - despachos
+
+volumes:
+  dbdata:
