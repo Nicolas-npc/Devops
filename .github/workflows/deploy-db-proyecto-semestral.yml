@@ -1,4 +1,5 @@
 name: Deploy Proyecto Semestral DB
+# trigger: deploy branch path activation
 
 on:
   workflow_dispatch:
